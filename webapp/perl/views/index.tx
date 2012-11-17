@@ -4,11 +4,11 @@
 <h1>TOP</h1>
 <ul>
 :   for $artists -> $artist {
-  <li>
-    <a href="/artist/<: $artist.id :>">
-      <span class="artist_name"><: $artist.name :></span>
-    </a>
-  </li>
+	<li>
+		<a href="/artist/<: $artist.id :>">
+			<span class="artist_name"><: $artist.name :></span>
+		</a>
+	</li>
 :   }
 </ul>
 : }

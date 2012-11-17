@@ -4,15 +4,15 @@
 <h2><: $ticket.artist_name ~ ' : ' ~ $ticket.name :></h2>
 <ul>
 :   for $variations -> $variation {
-<li class="variation">
-  <form method="POST" action="/buy">
-    <input type="hidden" name="ticket_id" value="<: $ticket.id :>">
-    <input type="hidden" name="variation_id" value="<: $variation.id :>">
-    <span class="variation_name"><: $variation.name :></span> 残り<span class="vacancy" id="<: 'vacancy_' ~ $variation.id :>"><: $variation.vacancy :></span>席
-    <input type="text" name="member_id" value="">
-    <input type="submit" value="購入">
-  </form>
-</li>
+	<li class="variation">
+		<form method="POST" action="/buy">
+			<input type="hidden" name="ticket_id" value="<: $ticket.id :>" />
+			<input type="hidden" name="variation_id" value="<: $variation.id :>" />
+			<span class="variation_name"><: $variation.name :></span> 残り<span class="vacancy" id="<: 'vacancy_' ~ $variation.id :>"><: $variation.vacancy :></span>席
+			<input type="text" name="member_id" value="" />
+			<input type="submit" value="購入" />
+		</form>
+	</li>
 :   }
 </ul>
 
@@ -23,12 +23,12 @@
 <h4><: $variation.name :></h4>
 <table class="seats" data-variationid="<: $variation.id :>">
 :     for [0 .. 63] -> $row {
-  <tr>
+	<tr>
 :       for [0 .. 63] -> $col {
 :         my $key = to_02d($row) ~ '-' ~ to_02d($col)
-    <td id="<: $key :>" class="<: $stock[$key].order_id ? 'unavailable' : 'available' :>"></td>
+		<td id="<: $key :>" class="<: $stock[$key].order_id ? 'unavailable' : 'available' :>"></td>
 :       }
-  </tr>
+	</tr>
 :     }
 </table>
 :   }
