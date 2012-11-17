@@ -46,9 +46,73 @@ sub dbh {
     };
 }
 
-my %VARIATION;
-my %TICKET;
-my %ARTIST;
+sub select_all {
+    my $self = shift;
+    my $rows_ref = $self->dbh->select_all( @_ );
+    return @{ $rows_ref };
+}
+
+{
+    my %VARIATION;
+
+    sub variation {
+        my $self = shift;
+        my $id   = shift;
+
+        return $VARIATION{ $id }
+            if %VARIATION;
+
+        foreach my $cols_ref ( $self->select_all( "SELECT id, name, ticket_id FROM variation" ) ) {
+            $VARIATION{ $cols_ref->{id} } = {
+                name      => $cols_ref->{name},
+                ticket_id => $cols_ref->{ticket_id},
+            };
+        }
+
+        return $VARIATION{ $id };
+    }
+}
+
+{
+    my %TICKET;
+
+    sub ticket {
+        my $self = shift;
+        my $id   = shift;
+
+        return $TICKET{ $id }
+            if %TICKET;
+
+        foreach my $cols_ref ( $self->select_all( "SELECT id, name, artist_id FROM ticket" ) ) {
+            $TICKET{ $cols_ref->{id} } = {
+                name      => $cols_ref->{name},
+                artist_id => $cols_ref->{artist_id},
+            };
+        }
+
+        return $TICKET{ $id };
+    }
+}
+
+{
+    my %ARTIST;
+
+    sub artist {
+        my $self = shift;
+        my $id   = shift;
+
+        return $ARTIST{ $id }
+            if %ARTIST;
+
+        foreach my $cols_ref ( $self->select_all( "SELECT id, name FROM artist" ) ) {
+            $ARTIST{ $cols_ref->{id} } = {
+                name => $cols_ref->{name},
+            };
+        }
+
+        return $ARTIST{ $id };
+    }
+}
 
 filter 'recent_sold' => sub {
     my( $app ) = @_;
@@ -59,14 +123,14 @@ filter 'recent_sold' => sub {
         my @orders;
 
         GET_ORDERS: {
-            my @order_ids = map { $_->{id} } @{ $dbh->select_all( <<END_SQL ) };
+            my @order_ids = map { $_->{id} } $self->select_all( <<END_SQL );
 SELECT id FROM order_request ORDER BY id DESC LIMIT 10
 END_SQL
 
             last GET_ORDERS
                 unless @order_ids;
 
-            my @stocks = @{ $dbh->select_all(
+            my @stocks = $self->select_all(
                 sprintf(
                     <<END_SQL,
 SELECT variation_id, seat_id, order_id FROM stock WHERE order_id IN (%s)
@@ -74,43 +138,17 @@ END_SQL
                     join q{,}, ( "?" ) x @order_ids,
                 ),
                 @order_ids,
-            ) };
+            );
 
             foreach my $stock_ref ( sort { $b->{order_id} <=> $a->{order_id} } @stocks ) {
-                unless ( $VARIATION{ $stock_ref->{variation_id} } ) {
-                    my $variation_ref = $dbh->select_row(
-                        <<END_SQL,
-SELECT name, ticket_id FROM variation WHERE id = ?
-END_SQL
-                        $stock_ref->{variation_id},
-                    );
-                    $VARIATION{ $stock_ref->{variation_id} } = { %{ $variation_ref } };
-
-                    my $ticket_ref = $dbh->select_row(
-                        <<END_SQL,
-SELECT name, artist_id FROM ticket WHERE id = ?
-END_SQL
-                        $variation_ref->{ticket_id},
-                    );
-                    $TICKET{ $variation_ref->{ticket_id} } = { %{ $ticket_ref } };
-
-                    my $artist_ref = $dbh->select_row(
-                        <<END_SQL,
-SELECT name FROM artist WHERE id = ?
-END_SQL
-                        $ticket_ref->{artist_id},
-                    );
-                    $ARTIST{ $ticket_ref->{artist_id} } = { %{ $artist_ref } };
-                }
-
                 my $variation_id = $stock_ref->{variation_id};
-                my $ticket_id    = $VARIATION{ $variation_id }{ticket_id};
-                my $artist_id    = $TICKET{ $ticket_id }{artist_id};
+                my $ticket_id    = $self->variation( $variation_id )->{ticket_id};
+                my $artist_id    = $self->ticket( $ticket_id )->{artist_id};
                 my %order        = (
                     seat_id => $stock_ref->{seat_id},
-                    v_name  => $VARIATION{ $variation_id }{name},
-                    t_name  => $TICKET{ $ticket_id }{name},
-                    a_name  => $ARTIST{ $artist_id }{name},
+                    v_name  => $self->variation( $variation_id )->{name},
+                    t_name  => $self->ticket( $ticket_id )->{name},
+                    a_name  => $self->artist( $artist_id )->{name},
                 );
 
                 push @orders, \%order;
@@ -123,14 +161,20 @@ END_SQL
     };
 };
 
-get '/' => [ qw( recent_sold ) ] => sub {
+get "/recent_sold" => [ qw( recent_sold ) ] => sub {
+    my( $self, $c ) = @_;
+
+    return $c->render( "recent_sold.tx" );
+};
+
+get '/' => sub {
     my( $self, $c ) = @_;
     my $rows = $self->dbh->select_all( 'SELECT * FROM artist ORDER BY id' );
 
     return $c->render( 'index.tx', { artists => $rows } );
 };
 
-get '/artist/:artistid' => [ qw( recent_sold ) ] => sub {
+get '/artist/:artistid' => sub {
     my( $self, $c ) = @_;
 
     my $artist = $self->dbh->select_row(
@@ -163,7 +207,7 @@ END_SQL
     );
 };
 
-get '/ticket/:ticketid' => [ qw( recent_sold ) ] => sub {
+get '/ticket/:ticketid' => sub {
     my( $self, $c ) = @_;
 
     my $ticket = $self->dbh->select_row(
