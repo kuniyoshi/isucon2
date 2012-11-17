@@ -16,19 +16,7 @@
 			</a>
 		</header>
 		<div id="sidebar">
-: if $c.stash.recent_sold {
-			<table>
-				<tr>
-					<th colspan="2">最近購入されたチケット</th>
-				</tr>
-:   for $c.stash.recent_sold -> $item {
-				<tr>
-					<td class="recent_variation"><: [$item.a_name, $item.t_name, $item.v_name].join(' ') :></td>
-					<td class="recent_seat_id"><: $item.seat_id :></td>
-				</tr>
-:   }
-			</table>
-: }
+			<!--# include virtual="/recent_sold" -->
 		</div>
 		<div id="content">
 : block content -> { }
