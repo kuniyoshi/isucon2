@@ -3,10 +3,11 @@ use utf8;
 use strict;
 use warnings;
 use autodie qw( open close );
-use Kossy;
-use DBIx::Sunny;
-use JSON qw( decode_json );
 use Data::Dumper;
+use Time::HiRes qw( tv_interval gettimeofday );
+use JSON qw( decode_json );
+use DBIx::Sunny;
+use Kossy;
 
 $Data::Dumper::Terse    = 1;
 $Data::Dumper::Sortkeys = 1;
@@ -209,18 +210,14 @@ END_SQL
 
 get '/ticket/:ticketid' => sub {
     my( $self, $c ) = @_;
+    my $ticket_id   = $c->args->{ticketid};
+    my %ticket      = %{ $self->ticket( $ticket_id ) };
+    $ticket{id}          = $ticket_id;
+    $ticket{artist_name} = $self->artist( $ticket{artist_id} )->{name};
 
-    my $ticket = $self->dbh->select_row(
-        <<END_SQL,
-SELECT t.*, a.name AS artist_name
-FROM ticket t INNER JOIN artist a ON t.artist_id = a.id
-WHERE t.id = ? LIMIT 1
-END_SQL
-        $c->args->{ticketid},
-    );
     my $variations = $self->dbh->select_all(
         'SELECT id, name FROM variation WHERE ticket_id = ? ORDER BY id',
-        $ticket->{id},
+        $ticket{id},
     );
 
     for my $variation ( @{ $variations } ) {
@@ -239,7 +236,7 @@ END_SQL
     return $c->render(
         'ticket.tx',
         {
-            ticket     => $ticket,
+            ticket     => \%ticket,
             variations => $variations,
         }
     );
