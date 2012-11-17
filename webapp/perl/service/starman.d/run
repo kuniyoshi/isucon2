@@ -1,0 +1,14 @@
+#!/bin/sh
+START_SERVER=/home/isucon/isucon2/webapp/perl/extlib/bin/start_server
+STARMAN=/home/isucon/isucon2/webapp/perl/extlib/bin/starman
+PSGI_FILE=/home/isucon/isucon2/webapp/perl/app.psgi
+export PERL5LIB=/home/isucon/isucon2/webapp/perl/lib:/home/isucon/isucon2/webapp/perl/extlib/lib/perl5
+exec $START_SERVER\
+ --port 192.168.1.122:5000\
+ --\
+  $STARMAN\
+    --user www\
+    --workers 8\
+    --access-log /dev/stdout\
+    $PSGI_FILE\
+    2>&1
