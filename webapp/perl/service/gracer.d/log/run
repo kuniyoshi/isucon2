@@ -1,0 +1,4 @@
+#!/bin/sh
+exec\
+ setuidgid logadmin\
+ multilog t ./main
