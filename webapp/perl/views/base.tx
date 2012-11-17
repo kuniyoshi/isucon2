@@ -16,7 +16,7 @@
 			</a>
 		</header>
 		<div id="sidebar">
-			<!--# include virtual="/recent_sold" -->
+			<esi:include src="/recent_sold" />
 		</div>
 		<div id="content">
 : block content -> { }
