@@ -6,6 +6,11 @@ use autodie qw( open close );
 use Kossy;
 use DBIx::Sunny;
 use JSON qw( decode_json );
+use Data::Dumper;
+
+$Data::Dumper::Terse    = 1;
+$Data::Dumper::Sortkeys = 1;
+$Data::Dumper::Indent   = 1;
 
 sub config {
     my $self = shift;
@@ -41,21 +46,80 @@ sub dbh {
     };
 }
 
+my %VARIATION;
+my %TICKET;
+my %ARTIST;
+
 filter 'recent_sold' => sub {
     my( $app ) = @_;
 
     return sub {
         my( $self, $c ) = @_;
-        $c->stash->{recent_sold} = $self->dbh->select_all( <<END_SQL );
-SELECT stock.seat_id, variation.name AS v_name, ticket.name AS t_name, artist.name AS a_name
-FROM stock
-JOIN variation ON stock.variation_id = variation.id
-JOIN ticket ON variation.ticket_id = ticket.id
-JOIN artist ON ticket.artist_id = artist.id
-WHERE order_id IS NOT NULL
-ORDER BY order_id DESC LIMIT 10
+        my $dbh = $self->dbh;
+        my @orders;
+
+        GET_ORDERS: {
+            my @order_ids = map { $_->{id} } @{ $dbh->select_all( <<END_SQL ) };
+SELECT id FROM order_request ORDER BY id DESC LIMIT 10
 END_SQL
-        $app->( $self, $c );
+
+            last GET_ORDERS
+                unless @order_ids;
+
+            my @stocks = @{ $dbh->select_all(
+                sprintf(
+                    <<END_SQL,
+SELECT variation_id, seat_id, order_id FROM stock WHERE order_id IN (%s)
+END_SQL
+                    join q{,}, ( "?" ) x @order_ids,
+                ),
+                @order_ids,
+            ) };
+
+            foreach my $stock_ref ( sort { $b->{order_id} <=> $a->{order_id} } @stocks ) {
+                unless ( $VARIATION{ $stock_ref->{variation_id} } ) {
+                    my $variation_ref = $dbh->select_row(
+                        <<END_SQL,
+SELECT name, ticket_id FROM variation WHERE id = ?
+END_SQL
+                        $stock_ref->{variation_id},
+                    );
+                    $VARIATION{ $stock_ref->{variation_id} } = { %{ $variation_ref } };
+
+                    my $ticket_ref = $dbh->select_row(
+                        <<END_SQL,
+SELECT name, artist_id FROM ticket WHERE id = ?
+END_SQL
+                        $variation_ref->{ticket_id},
+                    );
+                    $TICKET{ $variation_ref->{ticket_id} } = { %{ $ticket_ref } };
+
+                    my $artist_ref = $dbh->select_row(
+                        <<END_SQL,
+SELECT name FROM artist WHERE id = ?
+END_SQL
+                        $ticket_ref->{artist_id},
+                    );
+                    $ARTIST{ $ticket_ref->{artist_id} } = { %{ $artist_ref } };
+                }
+
+                my $variation_id = $stock_ref->{variation_id};
+                my $ticket_id    = $VARIATION{ $variation_id }{ticket_id};
+                my $artist_id    = $TICKET{ $ticket_id }{artist_id};
+                my %order        = (
+                    seat_id => $stock_ref->{seat_id},
+                    v_name  => $VARIATION{ $variation_id }{name},
+                    t_name  => $TICKET{ $ticket_id }{name},
+                    a_name  => $ARTIST{ $artist_id }{name},
+                );
+
+                push @orders, \%order;
+            }
+        }
+
+        $c->stash->{recent_sold} = \@orders;
+
+        return $app->( $self, $c );
     };
 };
 
