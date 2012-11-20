@@ -8,5 +8,6 @@ requires 'DBD::mysql'  => '4.022';
 requires 'Starman'     => '0.3003';
 requires 'Server::Starter';
 requires 'Net::Server::SS::PreFork';
+requires 'Furl';
 
 WriteAll;

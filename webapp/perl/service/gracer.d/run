@@ -1,0 +1,2 @@
+#!/bin/sh
+exec ./grace.pl 2>&1

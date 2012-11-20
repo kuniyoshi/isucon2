@@ -7,6 +7,7 @@ use Data::Dumper;
 use Time::HiRes qw( tv_interval gettimeofday );
 use JSON qw( decode_json );
 use DBIx::Sunny;
+use Furl;
 use Kossy;
 
 $Data::Dumper::Terse    = 1;
@@ -23,6 +24,12 @@ sub config {
         close $FH;
         decode_json( $json );
     };
+}
+
+sub ua {
+    my $self = shift;
+
+    return $self->{_ua} ||= Furl->new;
 }
 
 sub dbh {
@@ -269,6 +276,10 @@ END_SQL
             $order_id,
         );
         $txn->commit;
+        $self->ua->request(
+            method => "PURGE",
+            url    => "http://192.168.1.121/admin/order.csv",
+        );
         return $c->render(
             'complete.tx',
             { seat_id => $seat_id, member_id => $member_id },
