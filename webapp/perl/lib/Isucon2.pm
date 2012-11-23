@@ -10,6 +10,7 @@ use JSON qw( decode_json );
 use DBIx::Sunny;
 use Furl;
 use Kossy;
+use Cache::Memcached;
 
 $Data::Dumper::Terse    = 1;
 $Data::Dumper::Sortkeys = 1;
@@ -31,6 +32,14 @@ sub ua {
     my $self = shift;
 
     return $self->{_ua} ||= Furl->new;
+}
+
+sub memd {
+    my $self = shift;
+
+    return $self->{_memd} ||= Cache::Memcached->new(
+        servers => [ "192.168.1.122:11211" ],
+    );
 }
 
 sub dbh {
@@ -252,6 +261,40 @@ get '/ticket/:ticketid' => sub {
     );
 };
 
+sub init_cache_data {
+    my $self = shift;
+    my $memd = $self->memd;
+    my $dbh  = $self->dbh;
+
+    my @variation_ids = map { $_->{id} } @{ $dbh->select_all( "SELECT id FROM variation" ) };
+
+    foreach my $id ( @variation_ids ) {
+        $memd->set( "nth:$id", 0 );
+
+        my @seat_ids = map { $_->{seat_id} } @{ $dbh->select_all( <<END_SQL, $id ) };
+SELECT seat_id FROM stock WHERE variation_id = ? ORDER BY md5(seat_id)
+END_SQL
+
+        $memd->set( "seat_id:$id", \@seat_ids );
+    }
+}
+
+sub get_seat_id {
+    my $self         = shift;
+    my $order_id     = shift;
+    my $variation_id = shift;
+    my $memd         = $self->memd;
+
+    $memd->incr( "nth:$variation_id" );
+    my $nth = $memd->get( "nth:$variation_id" );
+
+    my $seat_id_ref = $memd->get( "seat_id:$variation_id" );
+    my $seat_id     = $seat_id_ref->[ $nth - 1 ];
+    $memd->set( "order:$seat_id", $order_id );
+
+    return $seat_id;
+}
+
 post '/buy' => sub {
     my( $self, $c ) = @_;
 
@@ -263,57 +306,19 @@ $self->watch->start( "buy" );
 
     my $txn = $dbh->txn_scope;
     $dbh->query(
-        'INSERT INTO order_request (member_id, variation_id) VALUES (?, ?)',
+        'INSERT INTO order_request (member_id) VALUES (?)',
         $member_id,
-        $variation_id,
     );
     my $order_id = $dbh->last_insert_id;
 
+    my $seat_id  = $self->get_seat_id( $order_id, $variation_id );
+
 $self->watch->stop->start( "update" );
-
-    my $order_nth = $dbh->select_one(
-        <<END_SQL,
-SELECT COUNT(*) FROM order_request WHERE variation_id = ?
-END_SQL
-        $variation_id,
-    );
-    $order_nth++;
-
-    my $stock_id = $dbh->select_one(
-        <<END_SQL,
-SELECT stock_id FROM random_seat WHERE variation_id = ? AND order_nth = ?
-END_SQL
-        $variation_id,
-        $order_nth,
-    );
-
-    my $seat_id = $dbh->select_one(
-        <<END_SQL,
-SELECT seat_id FROM stock WHERE id = ?
-END_SQL
-        $stock_id,
-    );
-
-    $dbh->query(
-        <<END_SQL,
-UPDATE stock SET order_id = ? WHERE id = ?
-END_SQL
-        $order_id,
-        $stock_id,
-    );
 
 $self->watch->stop->start( "transaction" );
 
     if ( $seat_id ) {
-#        my $seat_id = $dbh->select_one(
-#            'SELECT seat_id FROM stock WHERE order_id = ? LIMIT 1',
-#            $order_id,
-#        );
         $txn->commit;
-        $self->ua->request(
-            method => "PURGE",
-            url    => "http://192.168.1.121/admin/order.csv",
-        );
 $self->watch->stop->start( "render" );
         my $res = $c->render(
             'complete.tx',
@@ -372,6 +377,8 @@ post '/admin' => sub {
     }
 
     close $fh;
+
+    $self->init_cache_data;
 
     return $c->redirect( '/admin' );
 };
