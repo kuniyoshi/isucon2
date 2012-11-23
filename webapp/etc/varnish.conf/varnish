@@ -19,5 +19,6 @@ DAEMON_OPTS="-a ${VARNISH_LISTEN_ADDRESS}:${VARNISH_LISTEN_PORT} \
              -t ${VARNISH_TTL} \
              -w ${VARNISH_MIN_THREADS},${VARNISH_MAX_THREADS},${VARNISH_THREAD_TIMEOUT} \
              -u www -g www \
+             -p sess_timeout=1 \
              -S ${VARNISH_SECRET_FILE} \
              -s ${VARNISH_STORAGE}"
