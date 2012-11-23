@@ -7,3 +7,8 @@ gracer:
 	sudo cp -a -R gracer.d /service/gracer
 	sudo chmod +t /service/gracer
 	sudo chown -R logadmin:logadmin /service/gracer/log
+
+memcached:
+	sudo cp -a -R memcached.d /service/memcached
+	sudo chmod +t /service/memcached
+	sudo chown -R logadmin:logadmin /service/memcached/log

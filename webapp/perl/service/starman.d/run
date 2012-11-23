@@ -8,7 +8,7 @@ exec $START_SERVER\
  --\
   $STARMAN\
     --user www\
-    --workers 8\
+    --workers 12\
     --access-log /dev/stdout\
     $PSGI_FILE\
     2>&1
