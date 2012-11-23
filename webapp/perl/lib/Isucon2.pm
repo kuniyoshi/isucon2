@@ -5,6 +5,7 @@ use warnings;
 use autodie qw( open close );
 use Data::Dumper;
 use Time::HiRes qw( tv_interval gettimeofday );
+use Time::StopWatchWithMessage;
 use JSON qw( decode_json );
 use DBIx::Sunny;
 use Furl;
@@ -53,6 +54,8 @@ sub dbh {
         );
     };
 }
+
+sub watch { shift->{watch} ||= Time::StopWatchWithMessage->new }
 
 sub select_all {
     my $self = shift;
@@ -251,39 +254,73 @@ get '/ticket/:ticketid' => sub {
 
 post '/buy' => sub {
     my( $self, $c ) = @_;
+
+$self->watch->start( "buy" );
+
     my $variation_id = $c->req->param( 'variation_id' );
     my $member_id    = $c->req->param( 'member_id' );
+    my $dbh          = $self->dbh;
 
-    my $txn = $self->dbh->txn_scope();
-    $self->dbh->query(
-        'INSERT INTO order_request (member_id) VALUES (?)',
+    my $txn = $dbh->txn_scope;
+    $dbh->query(
+        'INSERT INTO order_request (member_id, variation_id) VALUES (?, ?)',
         $member_id,
-    );
-    my $order_id = $self->dbh->last_insert_id;
-    my $rows     = $self->dbh->query(
-        <<END_SQL,
-UPDATE stock SET order_id = ?
-WHERE variation_id = ? AND order_id IS NULL
-ORDER BY RAND() LIMIT 1
-END_SQL
-        $order_id,
         $variation_id,
     );
+    my $order_id = $dbh->last_insert_id;
 
-    if ( $rows > 0 ) {
-        my $seat_id = $self->dbh->select_one(
-            'SELECT seat_id FROM stock WHERE order_id = ? LIMIT 1',
-            $order_id,
-        );
+$self->watch->stop->start( "update" );
+
+    my $order_nth = $dbh->select_one(
+        <<END_SQL,
+SELECT COUNT(*) FROM order_request WHERE variation_id = ?
+END_SQL
+        $variation_id,
+    );
+    $order_nth++;
+
+    my $stock_id = $dbh->select_one(
+        <<END_SQL,
+SELECT stock_id FROM random_seat WHERE variation_id = ? AND order_nth = ?
+END_SQL
+        $variation_id,
+        $order_nth,
+    );
+
+    my $seat_id = $dbh->select_one(
+        <<END_SQL,
+SELECT seat_id FROM stock WHERE id = ?
+END_SQL
+        $stock_id,
+    );
+
+    $dbh->query(
+        <<END_SQL,
+UPDATE stock SET order_id = ? WHERE id = ?
+END_SQL
+        $order_id,
+        $stock_id,
+    );
+
+$self->watch->stop->start( "transaction" );
+
+    if ( $seat_id ) {
+#        my $seat_id = $dbh->select_one(
+#            'SELECT seat_id FROM stock WHERE order_id = ? LIMIT 1',
+#            $order_id,
+#        );
         $txn->commit;
         $self->ua->request(
             method => "PURGE",
             url    => "http://192.168.1.121/admin/order.csv",
         );
-        return $c->render(
+$self->watch->stop->start( "render" );
+        my $res = $c->render(
             'complete.tx',
             { seat_id => $seat_id, member_id => $member_id },
         );
+#$self->watch->stop->warn;
+        return $res;
     }
     else {
         $txn->rollback;
