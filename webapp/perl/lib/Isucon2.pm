@@ -14,10 +14,6 @@ use Cache::Memcached;
 
 our $VERSION = "0.01";
 
-$Data::Dumper::Terse    = 1;
-$Data::Dumper::Sortkeys = 1;
-$Data::Dumper::Indent   = 1;
-
 sub config {
     my $self = shift;
 
@@ -65,6 +61,8 @@ sub dbh {
         );
     };
 }
+
+sub dumper { Data::Dumper->new( [ splice @_, 1 ] )->Terse( 1 )->Sortkeys( 1 )->Indent( 1 )->Dump }
 
 sub watch { shift->{watch} ||= Time::StopWatchWithMessage->new }
 
@@ -199,8 +197,6 @@ get "/" => sub {
 get "/artist/:artistid" => sub {
     my( $self, $c ) = @_;
 
-my $watch = $self->watch->start( "artist" );
-
     my $artist = $self->dbh->select_row(
         "SELECT id, name FROM artist WHERE id = ? LIMIT 1",
         $c->args->{artistid},
@@ -210,33 +206,31 @@ my $watch = $self->watch->start( "artist" );
         $artist->{id},
     );
 
-$watch->stop->start( "join" );
-
     for my $ticket ( @$tickets ) {
-        my $count = $self->dbh->select_one(
-            <<END_SQL,
-SELECT COUNT(*) FROM variation
-INNER JOIN stock ON stock.variation_id = variation.id
-WHERE variation.ticket_id = ? AND stock.order_id IS NULL
-END_SQL
+        my @variation_ids = $self->select_all(
+            "SELECT id FROM variation WHERE ticket_id = ?",
             $ticket->{id},
+        );
+        my $count = $self->dbh->select_one(
+            sprintf(
+                <<END_SQL,
+SELECT COUNT(*) FROM stock
+WHERE variation_id IN (%s) AND order_id IS NULL
+END_SQL
+                join q{,}, ( "?" ) x @variation_ids,
+            ),
+            @variation_ids,
         );
         $ticket->{count} = $count;
     }
 
-$watch->stop->start( "render" );
-
-    my $res = $c->render(
+    return $c->render(
         "artist.tx",
         {
             artist  => $artist,
             tickets => $tickets,
         },
     );
-
-$watch->stop->warn;
-
-    return $res;
 };
 
 get "/ticket/:ticketid" => sub {
