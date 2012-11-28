@@ -12,6 +12,8 @@ use Furl;
 use Kossy;
 use Cache::Memcached;
 
+our $VERSION = "0.01";
+
 $Data::Dumper::Terse    = 1;
 $Data::Dumper::Sortkeys = 1;
 $Data::Dumper::Indent   = 1;
@@ -20,8 +22,8 @@ sub config {
     my $self = shift;
 
     return $self->{_config} ||= do {
-        my $env = $ENV{ISUCON_ENV} || 'local';
-        open my $FH, '<', $self->root_dir . "/../config/common.${env}.json";
+        my $env = $ENV{ISUCON_ENV} || "local";
+        open my $FH, "<", $self->root_dir . "/../config/common.${env}.json";
         my $json = do { local $/; <$FH> };
         close $FH;
         decode_json( $json );
@@ -134,7 +136,7 @@ sub select_all {
     }
 }
 
-filter 'recent_sold' => sub {
+filter "recent_sold" => sub {
     my( $app ) = @_;
 
     return sub {
@@ -187,24 +189,28 @@ get "/recent_sold" => [ qw( recent_sold ) ] => sub {
     return $c->render( "recent_sold.tx" );
 };
 
-get '/' => sub {
+get "/" => sub {
     my( $self, $c ) = @_;
-    my $rows = $self->dbh->select_all( 'SELECT * FROM artist ORDER BY id' );
+    my $rows = $self->dbh->select_all( "SELECT * FROM artist ORDER BY id" );
 
-    return $c->render( 'index.tx', { artists => $rows } );
+    return $c->render( "index.tx", { artists => $rows } );
 };
 
-get '/artist/:artistid' => sub {
+get "/artist/:artistid" => sub {
     my( $self, $c ) = @_;
 
+my $watch = $self->watch->start( "artist" );
+
     my $artist = $self->dbh->select_row(
-        'SELECT id, name FROM artist WHERE id = ? LIMIT 1',
+        "SELECT id, name FROM artist WHERE id = ? LIMIT 1",
         $c->args->{artistid},
     );
     my $tickets = $self->dbh->select_all(
-        'SELECT id, name FROM ticket WHERE artist_id = ? ORDER BY id',
+        "SELECT id, name FROM ticket WHERE artist_id = ? ORDER BY id",
         $artist->{id},
     );
+
+$watch->stop->start( "join" );
 
     for my $ticket ( @$tickets ) {
         my $count = $self->dbh->select_one(
@@ -218,16 +224,22 @@ END_SQL
         $ticket->{count} = $count;
     }
 
-    return $c->render(
-        'artist.tx',
+$watch->stop->start( "render" );
+
+    my $res = $c->render(
+        "artist.tx",
         {
             artist  => $artist,
             tickets => $tickets,
         },
     );
+
+$watch->stop->warn;
+
+    return $res;
 };
 
-get '/ticket/:ticketid' => sub {
+get "/ticket/:ticketid" => sub {
     my( $self, $c ) = @_;
     my $ticket_id   = $c->args->{ticketid};
     my %ticket      = %{ $self->ticket( $ticket_id ) };
@@ -235,29 +247,29 @@ get '/ticket/:ticketid' => sub {
     $ticket{artist_name} = $self->artist( $ticket{artist_id} )->{name};
 
     my $variations = $self->dbh->select_all(
-        'SELECT id, name FROM variation WHERE ticket_id = ? ORDER BY id',
+        "SELECT id, name FROM variation WHERE ticket_id = ? ORDER BY id",
         $ticket{id},
     );
 
     for my $variation ( @{ $variations } ) {
         $variation->{stock} = $self->dbh->selectall_hashref(
-            'SELECT seat_id, order_id FROM stock WHERE variation_id = ?',
-            'seat_id',
+            "SELECT seat_id, order_id FROM stock WHERE variation_id = ?",
+            "seat_id",
             { },
             $variation->{id},
         );
         $variation->{vacancy} = $self->dbh->select_one(
-            'SELECT COUNT(*) FROM stock WHERE variation_id = ? AND order_id IS NULL',
+            "SELECT COUNT(*) FROM stock WHERE variation_id = ? AND order_id IS NULL",
             $variation->{id},
         );
     }
 
     return $c->render(
-        'ticket.tx',
+        "ticket.tx",
         {
             ticket     => \%ticket,
             variations => $variations,
-        }
+        },
     );
 };
 
@@ -295,18 +307,18 @@ sub get_seat_id {
     return $seat_id;
 }
 
-post '/buy' => sub {
+post "/buy" => sub {
     my( $self, $c ) = @_;
 
 $self->watch->start( "buy" );
 
-    my $variation_id = $c->req->param( 'variation_id' );
-    my $member_id    = $c->req->param( 'member_id' );
+    my $variation_id = $c->req->param( "variation_id" );
+    my $member_id    = $c->req->param( "member_id" );
     my $dbh          = $self->dbh;
 
     my $txn = $dbh->txn_scope;
     $dbh->query(
-        'INSERT INTO order_request (member_id) VALUES (?)',
+        "INSERT INTO order_request (member_id) VALUES (?)",
         $member_id,
     );
     my $order_id = $dbh->last_insert_id;
@@ -321,7 +333,7 @@ $self->watch->stop->start( "transaction" );
         $txn->commit;
 $self->watch->stop->start( "render" );
         my $res = $c->render(
-            'complete.tx',
+            "complete.tx",
             { seat_id => $seat_id, member_id => $member_id },
         );
 #$self->watch->stop->warn;
@@ -329,19 +341,19 @@ $self->watch->stop->start( "render" );
     }
     else {
         $txn->rollback;
-        return $c->render( 'soldout.tx' );
+        return $c->render( "soldout.tx" );
     }
 };
 
 # admin
 
-get '/admin' => sub {
+get "/admin" => sub {
     my( $self, $c ) = @_;
 
-    return $c->render( 'admin.tx' );
+    return $c->render( "admin.tx" );
 };
 
-get '/admin/order.csv' => sub {
+get "/admin/order.csv" => sub {
     my( $self, $c ) = @_;
     my $body        = q{};
 
@@ -356,16 +368,16 @@ END_SQL
         $body .= "\n";
     }
 
-    $c->res->content_type( 'text/csv' );
+    $c->res->content_type( "text/csv" );
     $c->res->body( $body );
 
     return $c->res;
 };
 
-post '/admin' => sub {
+post "/admin" => sub {
     my( $self, $c ) = @_;
 
-    open my $fh, '<', $self->root_dir . '/../config/database/initial_data.sql';
+    open my $fh, "<", $self->root_dir . "/../config/database/initial_data.sql";
 
     while ( <$fh> ) {
         chomp( my $sql = $_ );
@@ -380,7 +392,7 @@ post '/admin' => sub {
 
     $self->init_cache_data;
 
-    return $c->redirect( '/admin' );
+    return $c->redirect( "/admin" );
 };
 
 1;
