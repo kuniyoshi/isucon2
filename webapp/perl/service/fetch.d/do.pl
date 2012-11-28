@@ -10,7 +10,7 @@ use lib "/home/isucon/isucon2/webapp/perl/extlib/lib/perl5";
 use Parallel::ForkManager;
 use Furl;
 
-my $MAX_INTERVAL = 0.90;
+my $MAX_INTERVAL = 0.90; # TODO: this may be .45 [s]
 my $MAX_REQUESTS = 100;
 my @URLS         = (
     "http://192.168.1.121/recent_sold",
@@ -27,7 +27,7 @@ my @URLS         = (
 my $pm = Parallel::ForkManager->new( scalar @URLS );
 my $ua = Furl->new;
 
-warn "### pm renew";
+warn "### pm new/renew";
 
 foreach my $url ( @URLS ) {
     my $child = $pm->start
@@ -37,20 +37,21 @@ foreach my $url ( @URLS ) {
     while ( $count++ < $MAX_REQUESTS ) {
         my $start = [ gettimeofday ];
         my $res   = $ua->request(
-            method  => "GRACE",
+            method  => "FETCH",
             url     => $url,
             headers => [ "Connection" => "close" ],
         );
 
-        warn "GRACE $url";
+        warn "FETCH $url";
 
         my $interval = $MAX_INTERVAL - tv_interval( $start );
 
         if ( $interval > 0 ) {
             sleep $interval;
-            warn "slept: ${interval}s after $url";
+            warn "slept: ${interval}s after FETCH $url";
         }
     }
     $pm->finish;
 }
+
 $pm->wait_all_children;

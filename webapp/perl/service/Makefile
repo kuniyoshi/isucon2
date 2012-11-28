@@ -3,10 +3,10 @@ starman:
 	sudo chmod +t /service/starman
 	sudo chown -R logadmin:logadmin /service/starman/log
 
-gracer:
-	sudo cp -a -R gracer.d /service/gracer
-	sudo chmod +t /service/gracer
-	sudo chown -R logadmin:logadmin /service/gracer/log
+fetch:
+	sudo cp -a -R fetch.d /service/fetch
+	sudo chmod +t /service/fetch
+	sudo chown -R logadmin:logadmin /service/fetch/log
 
 memcached:
 	sudo cp -a -R memcached.d /service/memcached

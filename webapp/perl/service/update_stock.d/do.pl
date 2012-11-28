@@ -59,9 +59,9 @@ while ( 1 ) {
     }
 
     my $sleep_time = $MAX_INTERVAL - tv_interval( $start );
-    sleep $sleep_time
-        if $sleep_time > 0;
+
+    if ( $sleep_time > 0 ) {
+        sleep $sleep_time;
+        warn "$sleep_time [s] slept.";
+    }
 }
-
-exit;
-
