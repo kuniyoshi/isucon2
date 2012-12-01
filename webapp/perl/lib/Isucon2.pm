@@ -64,7 +64,7 @@ sub dbh {
 
 sub dumper { Data::Dumper->new( [ splice @_, 1 ] )->Terse( 1 )->Sortkeys( 1 )->Indent( 1 )->Dump }
 
-sub watch { shift->{watch} ||= Time::StopWatchWithMessage->new }
+sub watch { Time::StopWatchWithMessage->new }
 
 sub select_all {
     my $self = shift;
