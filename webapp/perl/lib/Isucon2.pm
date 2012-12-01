@@ -1,4 +1,5 @@
 package Isucon2;
+use 5.10.0;
 use utf8;
 use strict;
 use warnings;
@@ -72,66 +73,57 @@ sub select_all {
     return @{ $rows_ref };
 }
 
-{
-    my %VARIATION;
+sub variation {
+    my $self = shift;
+    my $id   = shift;
 
-    sub variation {
-        my $self = shift;
-        my $id   = shift;
-
-        return $VARIATION{ $id }
-            if %VARIATION;
-
+    state $VARIATION = do {
+        my %VARIATION;
         foreach my $cols_ref ( $self->select_all( "SELECT id, name, ticket_id FROM variation" ) ) {
             $VARIATION{ $cols_ref->{id} } = {
                 name      => $cols_ref->{name},
                 ticket_id => $cols_ref->{ticket_id},
             };
         }
+        \%VARIATION;
+    };
 
-        return $VARIATION{ $id };
-    }
+    return $VARIATION->{ $id };
 }
 
-{
-    my %TICKET;
+sub ticket {
+    my $self = shift;
+    my $id   = shift;
 
-    sub ticket {
-        my $self = shift;
-        my $id   = shift;
-
-        return $TICKET{ $id }
-            if %TICKET;
-
+    state $TICKET = do {
+        my %TICKET;
         foreach my $cols_ref ( $self->select_all( "SELECT id, name, artist_id FROM ticket" ) ) {
             $TICKET{ $cols_ref->{id} } = {
                 name      => $cols_ref->{name},
                 artist_id => $cols_ref->{artist_id},
             };
         }
+        \%TICKET;
+    };
 
-        return $TICKET{ $id };
-    }
+    return $TICKET->{ $id };
 }
 
-{
-    my %ARTIST;
+sub artist {
+    my $self = shift;
+    my $id   = shift;
 
-    sub artist {
-        my $self = shift;
-        my $id   = shift;
-
-        return $ARTIST{ $id }
-            if %ARTIST;
-
+    state $ARTIST = do {
+        my %ARTIST;
         foreach my $cols_ref ( $self->select_all( "SELECT id, name FROM artist" ) ) {
             $ARTIST{ $cols_ref->{id} } = {
                 name => $cols_ref->{name},
             };
         }
+        \%ARTIST;
+    };
 
-        return $ARTIST{ $id };
-    }
+    return $ARTIST->{ $id };
 }
 
 filter "recent_sold" => sub {
