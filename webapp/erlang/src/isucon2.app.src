@@ -1,11 +1,12 @@
 {application, isucon2,
  [
-  {description, ""},
+  {description, "isucon2"},
   {vsn, "1"},
   {registered, []},
   {applications, [
                   kernel,
-                  stdlib
+                  stdlib,
+                  cowboy
                  ]},
   {mod, { isucon2_app, []}},
   {env, []}
